@@ -1,6 +1,6 @@
 [package]
 name = "rustjack"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 authors = ["Krzysztof Furman <k_furman@outlook.com>"]
 description = "A simple TUI blackjack game in Rust with crossterm."
@@ -10,5 +10,5 @@ readme = "README.md"
 
 [dependencies]
 rand = "0.9.2"
-crossterm = "0.27"
-unicode-width = "0.1"
+crossterm = "0.29.0"
+unicode-width = "0.2.2"
