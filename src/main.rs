@@ -2,9 +2,10 @@ use crossterm::{
     cursor,
     event::{self, Event, KeyCode, KeyEvent},
     execute, queue,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen, Clear, ClearType},
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen, Clear, ClearType, size},
 };
 use std::io::{self, Write};
+use unicode_width::UnicodeWidthStr;
 
 mod game;
 use game::{Deck, Hand};
@@ -63,103 +64,213 @@ impl GameUI {
         self.round_result = String::new();
     }
 
+    // Helper to pad a line properly inside the box using Unicode width
+    fn pad_line(&self, content: &str, total_width: usize) -> String {
+        let display_width = UnicodeWidthStr::width(content);
+        let padding = total_width.saturating_sub(display_width);
+        format!("{}{}", content, " ".repeat(padding))
+    }
+
     fn render(&self) -> io::Result<()> {
         let mut stdout = io::stdout();
 
         // Clear screen and move cursor to top-left
         queue!(stdout, Clear(ClearType::All), cursor::MoveTo(0, 0))?;
 
-        let mut line = 0;
+        let (term_width, term_height) = size()?;
 
-        queue!(stdout, cursor::MoveTo(0, line))?;
-        write!(stdout, "===============================================\r")?;
+        // Main window dimensions
+        let window_width = 60;
+        let window_height = 20;
+        let start_x = (term_width.saturating_sub(window_width)) / 2;
+        let start_y = (term_height.saturating_sub(window_height)) / 2;
+
+        // Draw the main window
+        self.draw_main_window(&mut stdout, start_x, start_y, window_width)?;
+
+        // Draw popup if there's a result
+        if !self.round_result.is_empty() {
+            self.draw_popup(&mut stdout)?;
+        }
+
+        stdout.flush()?;
+        Ok(())
+    }
+
+    fn draw_main_window(&self, stdout: &mut io::Stdout, start_x: u16, start_y: u16, width: u16) -> io::Result<()> {
+        let inner_width = (width - 2) as usize; // Width inside the box borders
+
+        // Draw top border with title
+        queue!(stdout, cursor::MoveTo(start_x, start_y))?;
+        write!(stdout, "┌{}┐\r", "─".repeat(inner_width))?;
+
+        // Title
+        let title = " ♠ BLACKJACK ♥ ";
+        let title_x = start_x + (width - UnicodeWidthStr::width(title) as u16) / 2;
+        queue!(stdout, cursor::MoveTo(title_x, start_y))?;
+        write!(stdout, "{}\r", title)?;
+
+        let mut line = start_y + 1;
+
+        // Empty line
+        queue!(stdout, cursor::MoveTo(start_x, line))?;
+        write!(stdout, "│{}│\r", " ".repeat(inner_width))?;
         line += 1;
 
-        queue!(stdout, cursor::MoveTo(0, line))?;
-        write!(stdout, "        BLACKJACK TUI\r")?;
+        // Dealer section header
+        queue!(stdout, cursor::MoveTo(start_x, line))?;
+        write!(stdout, "├{}┤\r", "─".repeat(inner_width))?;
         line += 1;
 
-        queue!(stdout, cursor::MoveTo(0, line))?;
-        write!(stdout, "===============================================\r")?;
-        line += 2;
-
-        // Dealer's hand
-        queue!(stdout, cursor::MoveTo(0, line))?;
-        write!(stdout, "--- Dealer's Hand ---\r")?;
+        queue!(stdout, cursor::MoveTo(start_x, line))?;
+        let dealer_label = "  DEALER";
+        write!(stdout, "│{}│\r", self.pad_line(dealer_label, inner_width))?;
         line += 1;
 
+        queue!(stdout, cursor::MoveTo(start_x, line))?;
+        write!(stdout, "├{}┤\r", "─".repeat(inner_width))?;
+        line += 1;
+
+        // Dealer's cards
         match self.state {
             GameState::PlayerTurn => {
                 let cards = self.dealer_hand.display_str();
                 let visible = cards.split_once(' ').map(|(_, rest)| rest).unwrap_or("");
+                let display = format!("  Cards: [??] {}", visible);
 
-                queue!(stdout, cursor::MoveTo(0, line))?;
-                write!(stdout, "Cards: [??] {}\r", visible)?;
+                queue!(stdout, cursor::MoveTo(start_x, line))?;
+                write!(stdout, "│{}│\r", self.pad_line(&display, inner_width))?;
                 line += 1;
 
-                queue!(stdout, cursor::MoveTo(0, line))?;
-                write!(stdout, "Value: ???\r")?;
+                let value_display = "  Value: ???";
+                queue!(stdout, cursor::MoveTo(start_x, line))?;
+                write!(stdout, "│{}│\r", self.pad_line(value_display, inner_width))?;
                 line += 1;
             }
             _ => {
-                queue!(stdout, cursor::MoveTo(0, line))?;
-                write!(stdout, "Cards: {}\r", self.dealer_hand.display_str())?;
+                let display = format!("  Cards: {}", self.dealer_hand.display_str());
+
+                queue!(stdout, cursor::MoveTo(start_x, line))?;
+                write!(stdout, "│{}│\r", self.pad_line(&display, inner_width))?;
                 line += 1;
 
-                queue!(stdout, cursor::MoveTo(0, line))?;
-                write!(stdout, "Value: {}\r", self.dealer_hand.value())?;
+                let value_display = format!("  Value: {}", self.dealer_hand.value());
+                queue!(stdout, cursor::MoveTo(start_x, line))?;
+                write!(stdout, "│{}│\r", self.pad_line(&value_display, inner_width))?;
                 line += 1;
             }
         }
+
+        // Empty line
+        queue!(stdout, cursor::MoveTo(start_x, line))?;
+        write!(stdout, "│{}│\r", " ".repeat(inner_width))?;
         line += 1;
 
-        // Player's hand
-        queue!(stdout, cursor::MoveTo(0, line))?;
-        write!(stdout, "--- Your Hand ---\r")?;
+        // Player section header
+        queue!(stdout, cursor::MoveTo(start_x, line))?;
+        write!(stdout, "├{}┤\r", "─".repeat(inner_width))?;
         line += 1;
 
-        queue!(stdout, cursor::MoveTo(0, line))?;
-        write!(stdout, "Cards: {}\r", self.player_hand.display_str())?;
+        queue!(stdout, cursor::MoveTo(start_x, line))?;
+        let player_label = "  PLAYER";
+        write!(stdout, "│{}│\r", self.pad_line(player_label, inner_width))?;
         line += 1;
 
-        queue!(stdout, cursor::MoveTo(0, line))?;
-        write!(stdout, "Value: {}\r", self.player_hand.value())?;
-        line += 2;
+        queue!(stdout, cursor::MoveTo(start_x, line))?;
+        write!(stdout, "├{}┤\r", "─".repeat(inner_width))?;
+        line += 1;
 
-        // Result message
-        if !self.round_result.is_empty() {
-            queue!(stdout, cursor::MoveTo(0, line))?;
-            write!(stdout, "--- Result ---\r")?;
-            line += 1;
+        // Player's cards
+        let player_display = format!("  Cards: {}", self.player_hand.display_str());
+        queue!(stdout, cursor::MoveTo(start_x, line))?;
+        write!(stdout, "│{}│\r", self.pad_line(&player_display, inner_width))?;
+        line += 1;
 
-            queue!(stdout, cursor::MoveTo(0, line))?;
-            write!(stdout, "{}\r", self.round_result)?;
-            line += 2;
+        let player_value = format!("  Value: {}", self.player_hand.value());
+        queue!(stdout, cursor::MoveTo(start_x, line))?;
+        write!(stdout, "│{}│\r", self.pad_line(&player_value, inner_width))?;
+        line += 1;
+
+        // Empty line
+        queue!(stdout, cursor::MoveTo(start_x, line))?;
+        write!(stdout, "│{}│\r", " ".repeat(inner_width))?;
+        line += 1;
+
+        // Controls section
+        queue!(stdout, cursor::MoveTo(start_x, line))?;
+        write!(stdout, "├{}┤\r", "─".repeat(inner_width))?;
+        line += 1;
+
+        let controls = match self.state {
+            GameState::PlayerTurn => "  [H] Hit  │  [S] Stand  │  [Q] Quit",
+            GameState::RoundEnd => "  [N] New Round  │  [Q] Quit",
+            _ => "  [Q] Quit",
+        };
+
+        queue!(stdout, cursor::MoveTo(start_x, line))?;
+        write!(stdout, "│{}│\r", self.pad_line(controls, inner_width))?;
+        line += 1;
+
+        // Empty line
+        queue!(stdout, cursor::MoveTo(start_x, line))?;
+        write!(stdout, "│{}│\r", " ".repeat(inner_width))?;
+        line += 1;
+
+        // Bottom border
+        queue!(stdout, cursor::MoveTo(start_x, line))?;
+        write!(stdout, "└{}┘\r", "─".repeat(inner_width))?;
+
+        Ok(())
+    }
+
+    fn draw_popup(&self, stdout: &mut io::Stdout) -> io::Result<()> {
+        let (term_width, term_height) = size()?;
+
+        // Popup dimensions
+        let popup_width = 50;
+        let popup_height = 7;
+        let start_x = (term_width.saturating_sub(popup_width)) / 2;
+        let start_y = (term_height.saturating_sub(popup_height)) / 2;
+
+        // Draw shadow (optional, for depth effect)
+        for i in 0..popup_height {
+            queue!(stdout, cursor::MoveTo(start_x + 1, start_y + i + 1))?;
+            write!(stdout, "{}", " ".repeat(popup_width as usize))?;
         }
 
-        // Controls
-        queue!(stdout, cursor::MoveTo(0, line))?;
-        write!(stdout, "--- Controls ---\r")?;
-        line += 1;
+        // Draw popup box
+        queue!(stdout, cursor::MoveTo(start_x, start_y))?;
+        write!(stdout, "┌{}┐\r", "─".repeat(popup_width as usize - 2))?;
 
-        queue!(stdout, cursor::MoveTo(0, line))?;
-        match self.state {
-            GameState::PlayerTurn => {
-                write!(stdout, "[H] Hit  |  [S] Stand  |  [Q] Quit\r")?;
-            }
-            GameState::RoundEnd => {
-                write!(stdout, "[N] New Round  |  [Q] Quit\r")?;
-            }
-            _ => {
-                write!(stdout, "[Q] Quit\r")?;
-            }
+        for i in 1..popup_height - 1 {
+            queue!(stdout, cursor::MoveTo(start_x, start_y + i))?;
+            write!(stdout, "│{}│\r", " ".repeat(popup_width as usize - 2))?;
         }
-        line += 1;
 
-        queue!(stdout, cursor::MoveTo(0, line))?;
-        write!(stdout, "===============================================\r")?;
+        queue!(stdout, cursor::MoveTo(start_x, start_y + popup_height - 1))?;
+        write!(stdout, "└{}┘\r", "─".repeat(popup_width as usize - 2))?;
 
-        stdout.flush()?;
+        // Draw title
+        queue!(stdout, cursor::MoveTo(start_x + 2, start_y + 1))?;
+        write!(stdout, "ROUND RESULT\r")?;
+
+        // Draw separator
+        queue!(stdout, cursor::MoveTo(start_x, start_y + 2))?;
+        write!(stdout, "├{}┤\r", "─".repeat(popup_width as usize - 2))?;
+
+        // Draw the result message (centered)
+        let result_width = UnicodeWidthStr::width(self.round_result.as_str());
+        let result_x = start_x + ((popup_width as usize - result_width) / 2) as u16;
+        queue!(stdout, cursor::MoveTo(result_x, start_y + 3))?;
+        write!(stdout, "{}\r", self.round_result)?;
+
+        // Draw prompt
+        let prompt = "Press [N] for new round or [Q] to quit";
+        let prompt_width = UnicodeWidthStr::width(prompt);
+        let prompt_x = start_x + ((popup_width as usize - prompt_width) / 2) as u16;
+        queue!(stdout, cursor::MoveTo(prompt_x, start_y + 5))?;
+        write!(stdout, "{}\r", prompt)?;
+
         Ok(())
     }
 
@@ -203,7 +314,7 @@ impl GameUI {
         } else {
             self.round_result = format!("Push! It's a tie at {}", player_score);
         }
-        
+
         self.state = GameState::RoundEnd;
     }
 
