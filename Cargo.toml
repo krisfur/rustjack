@@ -1,6 +1,6 @@
 [package]
 name = "rustjack"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 authors = ["Krzysztof Furman <k_furman@outlook.com>"]
 description = "A simple TUI blackjack game in Rust with crossterm."

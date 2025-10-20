@@ -5,7 +5,16 @@ Minimalist TUI-based blackjack game in Rust with `crossterm`.
 ![screenshot](screenshots/screenshot1.png)
 
 ## How to play
-Run the program with:
+
+Install form crates.io using:
+
+```bash
+cargo install rustjack
+```
+
+and call the binary `rustjack`.
+
+If building from source, run:
 
 ```bash
 cargo run
