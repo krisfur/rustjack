@@ -81,7 +81,7 @@ impl GameUI {
 
         // Main window dimensions
         let window_width = 60;
-        let window_height = 20;
+        let window_height = 16;
         let start_x = (term_width.saturating_sub(window_width)) / 2;
         let start_y = (term_height.saturating_sub(window_height)) / 2;
 
@@ -111,11 +111,6 @@ impl GameUI {
         write!(stdout, "{}\r", title)?;
 
         let mut line = start_y + 1;
-
-        // Empty line
-        queue!(stdout, cursor::MoveTo(start_x, line))?;
-        write!(stdout, "│{}│\r", " ".repeat(inner_width))?;
-        line += 1;
 
         // Dealer section header
         queue!(stdout, cursor::MoveTo(start_x, line))?;
@@ -161,10 +156,6 @@ impl GameUI {
             }
         }
 
-        // Empty line
-        queue!(stdout, cursor::MoveTo(start_x, line))?;
-        write!(stdout, "│{}│\r", " ".repeat(inner_width))?;
-        line += 1;
 
         // Player section header
         queue!(stdout, cursor::MoveTo(start_x, line))?;
@@ -191,11 +182,6 @@ impl GameUI {
         write!(stdout, "│{}│\r", self.pad_line(&player_value, inner_width))?;
         line += 1;
 
-        // Empty line
-        queue!(stdout, cursor::MoveTo(start_x, line))?;
-        write!(stdout, "│{}│\r", " ".repeat(inner_width))?;
-        line += 1;
-
         // Controls section
         queue!(stdout, cursor::MoveTo(start_x, line))?;
         write!(stdout, "├{}┤\r", "─".repeat(inner_width))?;
@@ -209,11 +195,6 @@ impl GameUI {
 
         queue!(stdout, cursor::MoveTo(start_x, line))?;
         write!(stdout, "│{}│\r", self.pad_line(controls, inner_width))?;
-        line += 1;
-
-        // Empty line
-        queue!(stdout, cursor::MoveTo(start_x, line))?;
-        write!(stdout, "│{}│\r", " ".repeat(inner_width))?;
         line += 1;
 
         // Bottom border
